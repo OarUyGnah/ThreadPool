@@ -35,23 +35,21 @@ inline ThreadPool::ThreadPool(size_t threads)
     :   stop(false)
 {
     for(size_t i = 0;i<threads;++i)
-        workers.emplace_back(
+        workers.emplace_back(/*添加一个工作函数*/
             [this]
             {
                 for(;;)
                 {
                     std::function<void()> task;
-
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
                         this->condition.wait(lock,
-                            [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
+                            [this]{ return this->stop || !this->tasks.empty(); });//条件变量等待阻塞直到参数二返回为true
+                        if(this->stop && this->tasks.empty())//如果停止并且没有任务则return
                             return;
-                        task = std::move(this->tasks.front());
+                        task = std::move(this->tasks.front());//获取任务
                         this->tasks.pop();
                     }
-
                     task();
                 }
             }
@@ -77,9 +75,9 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
         if(stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
 
-        tasks.emplace([task](){ (*task)(); });
+        tasks.emplace([task](){ (*task)(); });//lambda [task]为外部task的shared_ptr指针值传递，工作函数内部调用operator*()
     }
-    condition.notify_one();
+    condition.notify_one();//唤醒一个等待的thread  line46
     return res;
 }
 
@@ -90,7 +88,7 @@ inline ThreadPool::~ThreadPool()
         std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
     }
-    condition.notify_all();
+    condition.notify_all();//唤醒所有进程
     for(std::thread &worker: workers)
         worker.join();
 }
